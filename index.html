@@ -279,12 +279,12 @@
         <span>Best: <strong id="bestEl">0</strong></span>
       </div>
 
-      <div id="hintPill" class="pill hint-pill">2/4/6/8 · Hold 5s or 0 for 3D</div>
-      <div id="pausePill" class="pill pause-pill">Paused · Press 5</div>
+      <div id="hintPill" class="pill hint-pill">Hold or 0 for 3D</div>
+      <div id="pausePill" class="pill pause-pill">Paused</div>
 
       <div id="gameoverBar" class="gameover-bar">
         <div class="gameover-info">Game Over · <b id="finalScoreEl">0</b></div>
-        <button id="restartBtn" class="btn-restart">Play Again (5)</button>
+        <button id="restartBtn" class="btn-restart">Play Again </button>
       </div>
     </div>
   </div>
@@ -435,7 +435,7 @@
     let holdTriggered = false;
     let holdStartTime = 0;
     let holdX = 0, holdY = 0;
-    const HOLD_DURATION = 5000;
+    const HOLD_DURATION = 3000;
 
     let lastTick = 0;
     let tickInterval = 155;
