@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Dot Matrix Snake - 2D/3D</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      touch-action: none;
+    }
+
+    .app-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .bottom-vignette {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 110px;
+      background: radial-gradient(ellipse at 50% 120%, rgba(0, 0, 0, 0.035) 0%, rgba(255, 255, 255, 0) 70%);
+      pointer-events: none;
+    }
+
+    .pill {
+      position: absolute;
+      background: #fafafa;
+      border: 1px solid #e6e7eb;
+      color: #82838a;
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      padding: 8px 18px;
+      border-radius: 9999px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.035);
+      backdrop-filter: blur(6px);
+      z-index: 10;
+    }
+
+    .loading-pill {
+      right: 20px;
+      bottom: 22px;
+      min-width: 70px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .score-pill {
+      top: 14px;
+      right: 14px;
+      padding: 6px 14px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0.92;
+    }
+
+    .score-pill span strong {
+      color: #2962ff;
+      font-weight: 600;
+    }
+
+    .hint-pill {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12.5px;
+      padding: 6px 14px;
+      transition: opacity 0.4s ease;
+      white-space: nowrap;
+    }
+
+    .hint-pill.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* মোড পরিবর্তনের সূক্ষ্ম নোটিফিকেশন পিল (১.৫ সেকেন্ড পর মিলিয়ে যাবে) */
+    .mode-toast {
+      top: 14px;
+      left: 14px;
+      font-size: 12.5px;
+      padding: 6px 14px;
+      color: #2962ff;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    }
+
+    .mode-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .pause-pill {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.95);
+      font-size: 14px;
+      padding: 8px 18px;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      z-index: 15;
+    }
+
+    .pause-pill.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .gameover-bar {
+      position: absolute;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(252, 252, 253, 0.96);
+      border: 1px solid #e5e7eb;
+      padding: 7px 9px 7px 16px;
+      border-radius: 9999px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 20;
+      white-space: nowrap;
+    }
+
+    .gameover-bar.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .gameover-info {
+      font-size: 13.5px;
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .gameover-info b {
+      color: #111827;
+    }
+
+    .btn-restart {
+      border: none;
+      background: #2962ff;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease;
+    }
+
+    .btn-restart:hover {
+      background: #1e50e2;
+    }
+
+    .btn-restart:active {
+      transform: scale(0.95);
+    }
+
+    @media (max-width: 340px) {
+      .loading-pill {
+        right: 10px;
+        bottom: 10px;
+        font-size: 12px;
+        padding: 4px 10px;
+        min-width: 48px;
+      }
+      .score-pill {
+        top: 8px;
+        right: 8px;
+        font-size: 11px;
+        padding: 4px 10px;
+        gap: 6px;
+      }
+      .mode-toast {
+        top: 8px;
+        left: 8px;
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+      .hint-pill {
+        bottom: 10px;
+        font-size: 10.5px;
+        padding: 4px 10px;
+      }
+      .pause-pill {
+        font-size: 11.5px;
+        padding: 5px 12px;
+      }
+      .gameover-bar {
+        bottom: 10px;
+        padding: 5px 6px 5px 11px;
+        gap: 7px;
+      }
+      .gameover-info {
+        font-size: 11px;
+      }
+      .btn-restart {
+        font-size: 11px;
+        padding: 5px 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-wrapper">
+    <!-- ১. লোডিং স্ক্রিন -->
+    <div id="loadingScreen" class="screen">
+      <canvas id="loadingCanvas"></canvas>
+      <div class="bottom-vignette"></div>
+      <div id="percentPill" class="pill loading-pill">0%</div>
+    </div>
+
+    <!-- ২. স্নেক গেম স্ক্রিন -->
+    <div id="gameScreen" class="screen hidden">
+      <canvas id="gameCanvas"></canvas>
+      <div class="bottom-vignette"></div>
+
+      <div id="modeToast" class="pill mode-toast">3D Mode</div>
+
+      <div class="pill score-pill">
+        <span>Score: <strong id="scoreEl">0</strong></span>
+        <span>Best: <strong id="bestEl">0</strong></span>
+      </div>
+
+      <div id="hintPill" class="pill hint-pill">2/4/6/8 · Hold 5s or 0 for 3D</div>
+      <div id="pausePill" class="pill pause-pill">Paused · Press 5</div>
+
+      <div id="gameoverBar" class="gameover-bar">
+        <div class="gameover-info">Game Over · <b id="finalScoreEl">0</b></div>
+        <button id="restartBtn" class="btn-restart">Play Again (5)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================
+       ১. লোডিং স্ক্রিন অ্যানিমেশন
+       ========================================================= */
+    const loadingScreen = document.getElementById("loadingScreen");
+    const loadingCanvas = document.getElementById("loadingCanvas");
+    const lCtx = loadingCanvas.getContext("2d");
+    const percentPill = document.getElementById("percentPill");
+
+    let lWidth = 0, lHeight = 0, lCols = 0, lRows = 0, lSpacing = 18;
+    let lOffsetX = 0, lOffsetY = 0;
+    let loadTime = 0;
+    let loadProgress = 0;
+    let isLoadingDone = false;
+
+    function setupLoadingCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      lWidth = window.innerWidth;
+      lHeight = window.innerHeight;
+
+      loadingCanvas.width = lWidth * dpr;
+      loadingCanvas.height = lHeight * dpr;
+      lCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const minDim = Math.min(lWidth, lHeight);
+      lSpacing = Math.max(8, Math.min(20, Math.floor(minDim / 17)));
+
+      lCols = Math.max(10, Math.floor((lWidth - 12) / lSpacing) + 1);
+      lRows = Math.max(12, Math.floor((lHeight - 12) / lSpacing) + 1);
+
+      lOffsetX = (lWidth - (lCols - 1) * lSpacing) / 2;
+      lOffsetY = (lHeight - (lRows - 1) * lSpacing) / 2;
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function finishLoading() {
+      if (isLoadingDone) return;
+      isLoadingDone = true;
+      loadingScreen.classList.add("hidden");
+      gameScreen.classList.remove("hidden");
+      initGame();
+    }
+
+    function drawLoading() {
+      if (isLoadingDone) return;
+
+      lCtx.clearRect(0, 0, lWidth, lHeight);
+
+      const period = 0.52;
+      const phase = (loadTime * 0.36) % period;
+
+      for (let r = 0; r < lRows; r++) {
+        for (let c = 0; c < lCols; c++) {
+          const x = lOffsetX + c * lSpacing;
+          const y = lOffsetY + r * lSpacing;
+
+          const nx = lCols > 1 ? c / (lCols - 1) : 0.5;
+          const ny = lRows > 1 ? r / (lRows - 1) : 0.5;
+
+          let intensity = 0;
+          for (let k = -1; k <= 3; k++) {
+            const center = phase + k * period;
+            const waveX = center + (k % 2 === 0 ? -0.04 : 0.03);
+            const waveY = center + (k % 2 === 0 ? 0.03 : -0.03);
+
+            const dx = nx - waveX;
+            const dy = ny - waveY;
+            const distSq = dx * dx + dy * dy;
+
+            const waveVal = Math.exp(-distSq / 0.026);
+            intensity = Math.max(intensity, waveVal);
+          }
+
+          const baseRadius = Math.max(0.85, lSpacing * 0.065);
+          const maxRadius = Math.max(1.8, lSpacing * 0.14);
+          const radius = lerp(baseRadius, maxRadius, intensity);
+
+          const red = Math.round(lerp(185, 45, intensity));
+          const green = Math.round(lerp(198, 88, intensity));
+          const blue = Math.round(lerp(232, 185, intensity));
+          const alpha = lerp(0.45, 0.96, intensity);
+
+          lCtx.beginPath();
+          lCtx.arc(x, y, radius, 0, Math.PI * 2);
+          lCtx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+          lCtx.fill();
+        }
+      }
+
+      loadTime += 0.016;
+
+      if (loadProgress < 100) {
+        loadProgress = Math.min(100, loadProgress + 0.58);
+        percentPill.textContent = Math.floor(loadProgress) + "%";
+        requestAnimationFrame(drawLoading);
+      } else {
+        finishLoading();
+      }
+    }
+
+    /* =========================================================
+       ২. স্নেক গেম (2D ও 3D মোড টগল, র‍্যাপ-অ্যারাউন্ড, T9)
+       ========================================================= */
+    const gameScreen = document.getElementById("gameScreen");
+    const gameCanvas = document.getElementById("gameCanvas");
+    const gCtx = gameCanvas.getContext("2d");
+
+    const scoreEl = document.getElementById("scoreEl");
+    const bestEl = document.getElementById("bestEl");
+    const hintPill = document.getElementById("hintPill");
+    const modeToast = document.getElementById("modeToast");
+    const pausePill = document.getElementById("pausePill");
+    const gameoverBar = document.getElementById("gameoverBar");
+    const finalScoreEl = document.getElementById("finalScoreEl");
+    const restartBtn = document.getElementById("restartBtn");
+
+    let gWidth = 0, gHeight = 0;
+    let gridCols = 11, gridRows = 15, cellSize = 32;
+    let gOffsetX = 0, gOffsetY = 0;
+
+    let snake = [];
+    let prevSnake = [];
+    let food = { x: 0, y: 0 };
+    let dir = { x: 0, y: 1 };
+    let dirQueue = [];
+    let score = 0;
+    let bestScore = 0;
+    let isGameOver = false;
+    let isPaused = false;
+    let pauseProgress = 0;
+    let hasMoved = false;
+    let ateFoodLastTick = false;
+
+    // 2D <-> 3D স্টেট
+    let is3DMode = false;
+    let camTilt = 0; // 0 = সম্পূর্ণ 2D, 1 = সম্পূর্ণ 3D
+    let toastTimer = null;
+
+    // ৫ সেকেন্ড লং-প্রেস স্টেট
+    let isHolding = false;
+    let holdTriggered = false;
+    let holdStartTime = 0;
+    let holdX = 0, holdY = 0;
+    const HOLD_DURATION = 5000;
+
+    let lastTick = 0;
+    let tickInterval = 155;
+    let gameLoopId = null;
+
+    try {
+      bestScore = parseInt(localStorage.getItem("dot_snake_best") || "0", 10);
+    } catch (e) {
+      bestScore = 0;
+    }
+    bestEl.textContent = bestScore;
+
+    function toggle3DMode() {
+      is3DMode = !is3DMode;
+      modeToast.textContent = is3DMode ? "3D Mode" : "2D Mode";
+      modeToast.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        modeToast.classList.remove("show");
+      }, 1600);
+
+      if (navigator.vibrate) {
+        try { navigator.vibrate(35); } catch (e) {}
+      }
+    }
+
+    function setupGameGrid() {
+      const dpr = window.devicePixelRatio || 1;
+      gWidth = window.innerWidth;
+      gHeight = window.innerHeight;
+
+      gameCanvas.width = gWidth * dpr;
+      gameCanvas.height = gHeight * dpr;
+      gCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const minDim = Math.min(gWidth, gHeight);
+      cellSize = Math.max(10, Math.min(36, Math.floor((minDim - 16) / 11)));
+
+      gridCols = Math.max(10, Math.floor((gWidth - cellSize) / cellSize));
+      gridRows = Math.max(12, Math.floor((gHeight - cellSize) / cellSize));
+
+      gridCols = Math.min(gridCols, 20);
+      gridRows = Math.min(gridRows, 18);
+
+      gOffsetX = (gWidth - (gridCols - 1) * cellSize) / 2;
+      gOffsetY = (gHeight - (gridRows - 1) * cellSize) / 2;
+    }
+
+    function resetGame() {
+      setupGameGrid();
+
+      const startX = Math.floor(gridCols / 3);
+      const startY = Math.floor(gridRows / 3);
+
+      snake = [
+        { x: startX, y: startY },
+        { x: startX, y: startY - 1 },
+        { x: startX, y: startY - 2 },
+        { x: startX, y: startY - 3 }
+      ];
+      prevSnake = snake.map(s => ({ ...s }));
+
+      dir = { x: 0, y: 1 };
+      dirQueue = [];
+      score = 0;
+      isGameOver = false;
+      isPaused = false;
+      pauseProgress = 0;
+      ateFoodLastTick = false;
+      tickInterval = 155;
+
+      scoreEl.textContent = "0";
+      pausePill.classList.remove("show");
+      gameoverBar.classList.remove("show");
+
+      spawnFood();
+      lastTick = performance.now();
+    }
+
+    function togglePause() {
+      if (isGameOver || !isLoadingDone) return;
+      isPaused = !isPaused;
+      if (isPaused) {
+        pauseProgress = Math.min(1, (performance.now() - lastTick) / tickInterval);
+        pausePill.classList.add("show");
+      } else {
+        lastTick = performance.now() - pauseProgress * tickInterval;
+        pausePill.classList.remove("show");
+      }
+    }
+
+    function spawnFood() {
+      const emptyCells = [];
+      for (let x = 0; x < gridCols; x++) {
+        for (let y = 0; y < gridRows; y++) {
+          const occupied = snake.some(seg => seg.x === x && seg.y === y);
+          if (!occupied) emptyCells.push({ x, y });
+        }
+      }
+      if (emptyCells.length === 0) {
+        triggerGameOver();
+        return;
+      }
+      food = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+    }
+
+    function queueDirection(nx, ny) {
+      if (isGameOver || isPaused) return;
+      if (!hasMoved) {
+        hasMoved = true;
+        hintPill.classList.add("fade-out");
+      }
+
+      const lastDir = dirQueue.length > 0 ? dirQueue[dirQueue.length - 1] : dir;
+      if (lastDir.x + nx === 0 && lastDir.y + ny === 0) return;
+      if (lastDir.x === nx && lastDir.y === ny) return;
+
+      if (dirQueue.length < 2) {
+        dirQueue.push({ x: nx, y: ny });
+      }
+    }
+
+    function stepSnake() {
+      if (dirQueue.length > 0) {
+        dir = dirQueue.shift();
+      }
+
+      prevSnake = snake.map(s => ({ ...s }));
+
+      let nx = snake[0].x + dir.x;
+      let ny = snake[0].y + dir.y;
+
+      if (nx < 0) nx = gridCols - 1;
+      else if (nx >= gridCols) nx = 0;
+
+      if (ny < 0) ny = gridRows - 1;
+      else if (ny >= gridRows) ny = 0;
+
+      const nextHead = { x: nx, y: ny };
+      const willEat = nextHead.x === food.x && nextHead.y === food.y;
+
+      const checkLimit = willEat ? snake.length : snake.length - 1;
+      const hitSelf = snake.slice(0, checkLimit).some(
+        seg => seg.x === nextHead.x && seg.y === nextHead.y
+      );
+
+      if (hitSelf) {
+        triggerGameOver();
+        return;
+      }
+
+      snake.unshift(nextHead);
+
+      if (willEat) {
+        ateFoodLastTick = true;
+        score += 1;
+        scoreEl.textContent = score;
+        if (score > bestScore) {
+          bestScore = score;
+          bestEl.textContent = bestScore;
+          try {
+            localStorage.setItem("dot_snake_best", String(bestScore));
+          } catch (e) {}
+        }
+        tickInterval = Math.max(92, 155 - score * 2.2);
+        spawnFood();
+      } else {
+        ateFoodLastTick = false;
+        snake.pop();
+      }
+    }
+
+    function triggerGameOver() {
+      isGameOver = true;
+      isPaused = false;
+      pausePill.classList.remove("show");
+      finalScoreEl.textContent = score;
+      setTimeout(() => {
+        if (isGameOver) {
+          gameoverBar.classList.add("show");
+        }
+      }, 450);
+    }
+
+    /* =========================================================
+       3D পার্সপেক্টিভ প্রোজেকশন (camTilt=0 হলে হুবহু 2D)
+       ========================================================= */
+    function project3D(gx, gy, lzPx) {
+      const cx = (gridCols - 1) / 2;
+      const cy = (gridRows - 1) / 2;
+      const lx = (gx - cx) * cellSize;
+      const ly = (gy - cy) * cellSize;
+
+      const centerX = gOffsetX + cx * cellSize;
+      const centerY = gOffsetY + cy * cellSize;
+
+      if (camTilt <= 0.001) {
+        return {
+          x: centerX + lx,
+          y: centerY + ly,
+          scale: 1,
+          depth: ly + lzPx
+        };
+      }
+
+      const tiltRad = camTilt * (48 * Math.PI / 180);
+      const cosT = Math.cos(tiltRad);
+      const sinT = Math.sin(tiltRad);
+
+      const camY = ly * cosT - lzPx * sinT;
+      const camZOffset = ly * sinT + lzPx * cosT;
+
+      const boardSpan = Math.max(gridCols * cellSize, gridRows * cellSize);
+      const camDist = boardSpan * 1.95;
+
+      const perspScale = camDist / Math.max(60, camDist - camZOffset);
+      const scale = lerp(1, perspScale, camTilt);
+      const fitScale = lerp(1, 0.85, camTilt);
+      const yShift = lerp(0, cellSize * 0.25, camTilt);
+
+      return {
+        x: centerX + lx * scale * fitScale,
+        y: centerY + camY * scale * fitScale + yShift,
+        scale: scale * fitScale,
+        depth: camZOffset
+      };
+    }
+
+    function clipBoardAtHeight(lzPx) {
+      const p1 = project3D(-0.5, -0.5, lzPx);
+      const p2 = project3D(gridCols - 0.5, -0.5, lzPx);
+      const p3 = project3D(gridCols - 0.5, gridRows - 0.5, lzPx);
+      const p4 = project3D(-0.5, gridRows - 0.5, lzPx);
+
+      gCtx.beginPath();
+      gCtx.moveTo(p1.x, p1.y);
+      gCtx.lineTo(p2.x, p2.y);
+      gCtx.lineTo(p3.x, p3.y);
+      gCtx.lineTo(p4.x, p4.y);
+      gCtx.closePath();
+      gCtx.clip();
+    }
+
+    function draw3DBoardBase() {
+      if (camTilt <= 0.01) return;
+
+      const p1 = project3D(-0.6, -0.6, 0);
+      const p2 = project3D(gridCols - 0.4, -0.6, 0);
+      const p3 = project3D(gridCols - 0.4, gridRows - 0.4, 0);
+      const p4 = project3D(-0.6, gridRows - 0.4, 0);
+
+      const thickness = cellSize * 0.35 * camTilt;
+
+      // বোর্ডের নিচের নরম ছায়া
+      gCtx.save();
+      gCtx.beginPath();
+      gCtx.moveTo(p4.x, p4.y + thickness);
+      gCtx.lineTo(p3.x, p3.y + thickness);
+      gCtx.lineTo(p3.x + 4 * camTilt, p3.y + thickness + 12 * camTilt);
+      gCtx.lineTo(p4.x - 4 * camTilt, p4.y + thickness + 12 * camTilt);
+      gCtx.closePath();
+      gCtx.fillStyle = `rgba(0, 0, 0, ${0.06 * camTilt})`;
+      gCtx.fill();
+
+      // বোর্ডের 3D সামনের পুরুত্ব (Slab edge)
+      gCtx.beginPath();
+      gCtx.moveTo(p4.x, p4.y);
+      gCtx.lineTo(p3.x, p3.y);
+      gCtx.lineTo(p3.x, p3.y + thickness);
+      gCtx.lineTo(p4.x, p4.y + thickness);
+      gCtx.closePath();
+      gCtx.fillStyle = `rgba(226, 232, 245, ${0.85 * camTilt})`;
+      gCtx.fill();
+
+      // বোর্ডের উপরিভাগের হালকা বর্ডার
+      gCtx.beginPath();
+      gCtx.moveTo(p1.x, p1.y);
+      gCtx.lineTo(p2.x, p2.y);
+      gCtx.lineTo(p3.x, p3.y);
+      gCtx.lineTo(p4.x, p4.y);
+      gCtx.closePath();
+      gCtx.fillStyle = `rgba(252, 253, 255, ${0.9 * camTilt})`;
+      gCtx.fill();
+      gCtx.strokeStyle = `rgba(215, 224, 242, ${0.75 * camTilt})`;
+      gCtx.lineWidth = 1.2;
+      gCtx.stroke();
+      gCtx.restore();
+    }
+
+    function drawFloorShadow(gx, gy, baseRadius) {
+      if (camTilt <= 0.02) return;
+      const p = project3D(gx, gy, 0);
+      const r = baseRadius * p.scale;
+      const tiltFlatten = lerp(1, 0.56, camTilt);
+
+      gCtx.save();
+      gCtx.beginPath();
+      gCtx.ellipse(
+        p.x + r * 0.12 * camTilt,
+        p.y + r * 0.12 * camTilt,
+        r * 0.96,
+        r * 0.96 * tiltFlatten,
+        0, 0, Math.PI * 2
+      );
+      gCtx.fillStyle = `rgba(20, 35, 80, ${0.14 * camTilt})`;
+      gCtx.fill();
+      gCtx.restore();
+    }
+
+    function drawSphereOrCircle(gx, gy, lz, baseRadius, isHead, isDead) {
+      const p = project3D(gx, gy, lz);
+      const r = baseRadius * p.scale;
+
+      gCtx.beginPath();
+      gCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+
+      if (camTilt <= 0.03) {
+        gCtx.fillStyle = isDead ? "rgba(165, 165, 170, 0.72)" : "#2962ff";
+        gCtx.fill();
+      } else {
+        // 3D গোলকের গ্রেডিয়েন্ট শেডিং
+        const grad = gCtx.createRadialGradient(
+          p.x - r * 0.32 * camTilt,
+          p.y - r * 0.34 * camTilt,
+          r * 0.08,
+          p.x,
+          p.y,
+          r
+        );
+
+        if (!isDead) {
+          grad.addColorStop(0, camTilt > 0.4 ? "#85abff" : "#5182ff");
+          grad.addColorStop(0.45, "#2962ff");
+          grad.addColorStop(1, "#12349e");
+        } else {
+          grad.addColorStop(0, "rgba(218, 218, 224, 0.85)");
+          grad.addColorStop(0.55, "rgba(165, 165, 170, 0.76)");
+          grad.addColorStop(1, "rgba(115, 115, 122, 0.82)");
+        }
+        gCtx.fillStyle = grad;
+        gCtx.fill();
+      }
+
+      if (isHead) {
+        drawEyes3D(gx, gy, baseRadius, isDead);
+      }
+    }
+
+    function drawEyes3D(gx, gy, baseRadius, isDead) {
+      // গ্রিড ইউনিটে চোখের অবস্থান (2D এবং 3D উভয় মোডেই নিখুঁত)
+      const rGrid = baseRadius / cellSize;
+      const perpX = -dir.y;
+      const perpY = dir.x;
+
+      let eyeFwd = rGrid * 0.25;
+      let eyeSep = rGrid * 0.36;
+      let eyeZ = baseRadius * 0.55;
+
+      if (camTilt > 0.05) {
+        if (dir.y > 0) {
+          eyeFwd = rGrid * lerp(0.25, 0.46, camTilt);
+          eyeZ = baseRadius * lerp(0.55, 0.22, camTilt);
+        } else if (dir.y < 0) {
+          eyeFwd = rGrid * lerp(0.25, 0.18, camTilt);
+          eyeZ = baseRadius * lerp(0.55, 0.88, camTilt);
+        } else {
+          eyeFwd = rGrid * lerp(0.25, 0.36, camTilt);
+          eyeZ = baseRadius * lerp(0.55, 0.58, camTilt);
+        }
+      }
+
+      const e1 = project3D(gx + dir.x * eyeFwd + perpX * eyeSep, gy + dir.y * eyeFwd + perpY * eyeSep, eyeZ);
+      const e2 = project3D(gx + dir.x * eyeFwd - perpX * eyeSep, gy + dir.y * eyeFwd - perpY * eyeSep, eyeZ);
+
+      if (!isDead) {
+        const eyeR = Math.max(1.2, baseRadius * 0.14 * e1.scale);
+        gCtx.fillStyle = "#ffffff";
+
+        gCtx.beginPath();
+        gCtx.arc(e1.x, e1.y, eyeR, 0, Math.PI * 2);
+        gCtx.fill();
+
+        gCtx.beginPath();
+        gCtx.arc(e2.x, e2.y, eyeR, 0, Math.PI * 2);
+        gCtx.fill();
+      } else {
+        const s = Math.max(2.0, baseRadius * 0.19 * e1.scale);
+        gCtx.strokeStyle = "#111111";
+        gCtx.lineWidth = Math.max(1.4, baseRadius * 0.14 * e1.scale);
+        gCtx.lineCap = "round";
+
+        [e1, e2].forEach(ep => {
+          gCtx.beginPath();
+          gCtx.moveTo(ep.x - s, ep.y - s);
+          gCtx.lineTo(ep.x + s, ep.y + s);
+          gCtx.moveTo(ep.x + s, ep.y - s);
+          gCtx.lineTo(ep.x - s, ep.y + s);
+          gCtx.stroke();
+        });
+      }
+    }
+
+    function drawHoldIndicator(now) {
+      if (!isHolding || holdTriggered) return;
+      const elapsed = now - holdStartTime;
+      if (elapsed < 450) return; // সাধারণ ট্যাপ বা সোয়াইপে দেখাবে না
+
+      const progress = Math.min(1, elapsed / HOLD_DURATION);
+      const r = Math.max(16, Math.min(26, gWidth * 0.06));
+
+      gCtx.save();
+      gCtx.beginPath();
+      gCtx.arc(holdX, holdY, r, 0, Math.PI * 2);
+      gCtx.strokeStyle = "rgba(41, 98, 255, 0.14)";
+      gCtx.lineWidth = 2.5;
+      gCtx.stroke();
+
+      gCtx.beginPath();
+      gCtx.arc(holdX, holdY, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+      gCtx.strokeStyle = "rgba(41, 98, 255, 0.55)";
+      gCtx.lineWidth = 2.5;
+      gCtx.lineCap = "round";
+      gCtx.stroke();
+      gCtx.restore();
+    }
+
+    function drawGame(now) {
+      gCtx.clearRect(0, 0, gWidth, gHeight);
+
+      // ৫ সেকেন্ড হোল্ড চেক
+      if (isHolding && !holdTriggered && (now - holdStartTime >= HOLD_DURATION)) {
+        holdTriggered = true;
+        isHolding = false;
+        toggle3DMode();
+      }
+
+      // 2D <-> 3D স্মুথ ট্রানজিশন
+      const targetTilt = is3DMode ? 1 : 0;
+      camTilt += (targetTilt - camTilt) * 0.12;
+      if (Math.abs(targetTilt - camTilt) < 0.002) camTilt = targetTilt;
+
+      // ১. 3D বোর্ড বেজ (যদি 3D মোড চালু থাকে)
+      draw3DBoardBase();
+
+      // ২. ব্যাকগ্রাউন্ড ডট গ্রিড
+      const baseDotR = Math.max(1.1, cellSize * 0.055);
+      gCtx.fillStyle = "rgba(0, 0, 0, 0.085)";
+      for (let r = 0; r < gridRows; r++) {
+        for (let c = 0; c < gridCols; c++) {
+          const p = project3D(c, r, 0);
+          gCtx.beginPath();
+          gCtx.arc(p.x, p.y, baseDotR * p.scale, 0, Math.PI * 2);
+          gCtx.fill();
+        }
+      }
+
+      // লজিক আপডেট
+      let t = 1;
+      if (isPaused) {
+        t = pauseProgress;
+      } else if (!isGameOver) {
+        const elapsed = now - lastTick;
+        if (elapsed >= tickInterval) {
+          lastTick = now - (elapsed % tickInterval);
+          stepSnake();
+        }
+        t = isGameOver ? 0 : Math.min(1, (now - lastTick) / tickInterval);
+      }
+
+      // ৩. সব রেন্ডারেবল গোলক (সাপ + খাবার) একত্রিত করে ডেপথ অনুযায়ী সাজানো
+      const drawItems = [];
+
+      // খাবার (3D মোডে হালকা ভেসে থাকবে)
+      const foodBaseR = cellSize * 0.36;
+      const foodFloat = camTilt * (Math.sin(now * 0.0045) * cellSize * 0.1 + cellSize * 0.12);
+      const foodLz = foodBaseR * camTilt + foodFloat;
+      drawItems.push({
+        gx: food.x,
+        gy: food.y,
+        lz: foodLz,
+        radius: foodBaseR,
+        isHead: false,
+        wrapped: false,
+        depth: project3D(food.x, food.y, foodLz).depth
+      });
+
+      // সাপের সেগমেন্টগুলো
+      const totalSegs = snake.length;
+      for (let i = totalSegs - 1; i >= 0; i--) {
+        const curr = snake[i];
+        const prev = prevSnake[Math.min(i, prevSnake.length - 1)] || curr;
+
+        const ratio = totalSegs > 1 ? i / (totalSegs - 1) : 0;
+        const radius =
+          i === 0
+            ? cellSize * 0.44
+            : lerp(cellSize * 0.36, cellSize * 0.23, ratio);
+        const segLz = radius * camTilt;
+
+        if (isGameOver) {
+          drawItems.push({
+            gx: curr.x,
+            gy: curr.y,
+            lz: segLz,
+            radius,
+            isHead: i === 0,
+            wrapped: false,
+            depth: project3D(curr.x, curr.y, segLz).depth
+          });
+          continue;
+        }
+
+        const dx = curr.x - prev.x;
+        const dy = curr.y - prev.y;
+        const wrappedX = Math.abs(dx) > 1;
+        const wrappedY = Math.abs(dy) > 1;
+
+        if (!wrappedX && !wrappedY) {
+          const gx = lerp(prev.x, curr.x, t);
+          const gy = lerp(prev.y, curr.y, t);
+          drawItems.push({
+            gx,
+            gy,
+            lz: segLz,
+            radius,
+            isHead: i === 0,
+            wrapped: false,
+            depth: project3D(gx, gy, segLz).depth
+          });
+        } else {
+          const stepX = wrappedX ? (dx < 0 ? 1 : -1) : dx;
+          const stepY = wrappedY ? (dy < 0 ? 1 : -1) : dy;
+
+          const outX = prev.x + stepX * t;
+          const outY = prev.y + stepY * t;
+          drawItems.push({
+            gx: outX,
+            gy: outY,
+            lz: segLz,
+            radius,
+            isHead: i === 0,
+            wrapped: true,
+            depth: project3D(outX, outY, segLz).depth
+          });
+
+          const inX = curr.x - stepX * (1 - t);
+          const inY = curr.y - stepY * (1 - t);
+          drawItems.push({
+            gx: inX,
+            gy: inY,
+            lz: segLz,
+            radius,
+            isHead: i === 0,
+            wrapped: true,
+            depth: project3D(inX, inY, segLz).depth
+          });
+        }
+      }
+
+      // না খেলে সামনে আগালে লেজের ফেলে আসা ঘরে ক্ষুদ্র ডট
+      if (!isGameOver && !ateFoodLastTick && prevSnake.length > 0) {
+        const vacated = prevSnake[prevSnake.length - 1];
+        const fadeR = cellSize * 0.2 * (1 - t);
+        if (fadeR > 0.5) {
+          const fadeLz = fadeR * camTilt;
+          drawItems.push({
+            gx: vacated.x,
+            gy: vacated.y,
+            lz: fadeLz,
+            radius: fadeR,
+            isHead: false,
+            wrapped: false,
+            depth: project3D(vacated.x, vacated.y, fadeLz).depth
+          });
+        }
+      }
+
+      // আগে ফ্লোরের সব ছায়া আঁকা (ক্লিপড)
+      if (camTilt > 0.02) {
+        gCtx.save();
+        clipBoardAtHeight(0);
+        for (const item of drawItems) {
+          drawFloorShadow(item.gx, item.gy, item.radius);
+        }
+        gCtx.restore();
+      }
+
+      // ৩D ডেপথ সর্টিং (দূরের বস্তু আগে, কাছের বস্তু পরে)
+      drawItems.sort((a, b) => a.depth - b.depth);
+
+      // গোলকগুলো আঁকা
+      for (const item of drawItems) {
+        if (item.wrapped) {
+          gCtx.save();
+          clipBoardAtHeight(item.lz);
+          drawSphereOrCircle(item.gx, item.gy, item.lz, item.radius, item.isHead, isGameOver);
+          gCtx.restore();
+        } else {
+          drawSphereOrCircle(item.gx, item.gy, item.lz, item.radius, item.isHead, isGameOver);
+        }
+      }
+
+      // ৫ সেকেন্ড লং-প্রেস ইন্ডিকেটর
+      drawHoldIndicator(now);
+
+      gameLoopId = requestAnimationFrame(drawGame);
+    }
+
+    function initGame() {
+      resetGame();
+      if (gameLoopId) cancelAnimationFrame(gameLoopId);
+      gameLoopId = requestAnimationFrame(drawGame);
+    }
+
+    /* =========================================================
+       ৩. T9 কীপ্যাড + কীবোর্ড + টাচ (Swipe & 5s Hold) কন্ট্রোল
+       ========================================================= */
+    window.addEventListener("keydown", e => {
+      const key = e.key;
+      const code = e.keyCode || e.which;
+
+      // 0 চাপলে যেকোনো সময় 3D / 2D মোড টগল হবে
+      if (key === "0" || code === 48 || code === 96) {
+        e.preventDefault();
+        if (e.repeat) return;
+        toggle3DMode();
+        return;
+      }
+
+      if (!isLoadingDone) {
+        if (
+          key === "5" || key === "Enter" || key === "SoftLeft" || key === "*" ||
+          code === 53 || code === 101 || code === 13 || code === 42
+        ) {
+          e.preventDefault();
+          finishLoading();
+        }
+        return;
+      }
+
+      // ২ / ArrowUp / W -> উপরে
+      if (
+        key === "2" || key === "ArrowUp" || key === "Up" || key === "w" || key === "W" ||
+        code === 50 || code === 98 || code === 38
+      ) {
+        e.preventDefault();
+        queueDirection(0, -1);
+        return;
+      }
+
+      // ৮ / ArrowDown / S -> নিচে
+      if (
+        key === "8" || key === "ArrowDown" || key === "Down" || key === "s" || key === "S" ||
+        code === 56 || code === 104 || code === 40
+      ) {
+        e.preventDefault();
+        queueDirection(0, 1);
+        return;
+      }
+
+      // ৪ / ArrowLeft / A -> বামে
+      if (
+        key === "4" || key === "ArrowLeft" || key === "Left" || key === "a" || key === "A" ||
+        code === 52 || code === 100 || code === 37
+      ) {
+        e.preventDefault();
+        queueDirection(-1, 0);
+        return;
+      }
+
+      // ৬ / ArrowRight / D -> ডানে
+      if (
+        key === "6" || key === "ArrowRight" || key === "Right" || key === "d" || key === "D" ||
+        code === 54 || code === 102 || code === 39
+      ) {
+        e.preventDefault();
+        queueDirection(1, 0);
+        return;
+      }
+
+      // ৫ / Enter / Space / SoftLeft / * -> Pause-Resume বা Play Again
+      if (
+        key === "5" || key === "Enter" || key === " " || key === "Spacebar" ||
+        key === "OK" || key === "Select" || key === "SoftLeft" || key === "*" ||
+        code === 53 || code === 101 || code === 13 || code === 32 || code === 42 || code === 106
+      ) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (isGameOver) {
+          resetGame();
+        } else {
+          togglePause();
+        }
+        return;
+      }
+
+      // # / SoftRight -> যেকোনো সময় Instant Restart
+      if (key === "#" || key === "SoftRight" || code === 163) {
+        e.preventDefault();
+        if (e.repeat) return;
+        resetGame();
+      }
+    });
+
+    // টাচ সোয়াইপ + ৫ সেকেন্ড লং-প্রেস কন্ট্রোল
+    let touchStartX = null;
+    let touchStartY = null;
+
+    gameCanvas.addEventListener("touchstart", e => {
+      if (e.touches.length > 0) {
+        const tx = e.touches[0].clientX;
+        const ty = e.touches[0].clientY;
+        touchStartX = tx;
+        touchStartY = ty;
+
+        isHolding = true;
+        holdTriggered = false;
+        holdStartTime = performance.now();
+        holdX = tx;
+        holdY = ty;
+      }
+    }, { passive: true });
+
+    gameCanvas.addEventListener("touchmove", e => {
+      if (touchStartX === null || touchStartY === null) return;
+      const tx = e.touches[0].clientX;
+      const ty = e.touches[0].clientY;
+
+      if (isHolding && Math.hypot(tx - holdX, ty - holdY) > 14) {
+        isHolding = false;
+      }
+
+      const dx = tx - touchStartX;
+      const dy = ty - touchStartY;
+      const threshold = 20;
+
+      if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          queueDirection(dx > 0 ? 1 : -1, 0);
+        } else {
+          queueDirection(0, dy > 0 ? 1 : -1);
+        }
+        touchStartX = tx;
+        touchStartY = ty;
+      }
+    }, { passive: true });
+
+    gameCanvas.addEventListener("touchend", () => {
+      touchStartX = null;
+      touchStartY = null;
+      isHolding = false;
+    });
+
+    gameCanvas.addEventListener("touchcancel", () => {
+      touchStartX = null;
+      touchStartY = null;
+      isHolding = false;
+    });
+
+    // পিসির মাউস দিয়েও ৫ সেকেন্ড চেপে ধরে 3D/2D টগল সাপোর্ট
+    gameCanvas.addEventListener("mousedown", e => {
+      if (e.button !== 0) return;
+      isHolding = true;
+      holdTriggered = false;
+      holdStartTime = performance.now();
+      holdX = e.clientX;
+      holdY = e.clientY;
+    });
+
+    gameCanvas.addEventListener("mousemove", e => {
+      if (isHolding && Math.hypot(e.clientX - holdX, e.clientY - holdY) > 14) {
+        isHolding = false;
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      isHolding = false;
+    });
+
+    restartBtn.addEventListener("click", resetGame);
+
+    window.addEventListener("resize", () => {
+      if (!isLoadingDone) {
+        setupLoadingCanvas();
+      } else {
+        const dpr = window.devicePixelRatio || 1;
+        gWidth = window.innerWidth;
+        gHeight = window.innerHeight;
+        gameCanvas.width = gWidth * dpr;
+        gameCanvas.height = gHeight * dpr;
+        gCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        gOffsetX = (gWidth - (gridCols - 1) * cellSize) / 2;
+        gOffsetY = (gHeight - (gridRows - 1) * cellSize) / 2;
+      }
+    });
+
+    setupLoadingCanvas();
+    drawLoading();
+  </script>
+</body>
+</html>
