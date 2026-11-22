@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- আইকন ব্যাকগ্রাউন্ডের হালকা গ্রেডিয়েন্ট -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f5f7fd" />
+    </linearGradient>
+
+    <!-- 3D নীল গোলক (Orb) গ্রেডিয়েন্ট -->
+    <radialGradient id="orbGrad" cx="34%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#8cb0ff" />
+      <stop offset="42%" stop-color="#2962ff" />
+      <stop offset="100%" stop-color="#113399" />
+    </radialGradient>
+
+    <!-- ফুড অর্‌বের উজ্জ্বল গ্রেডিয়েন্ট -->
+    <radialGradient id="foodGrad" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#9bbbff" />
+      <stop offset="45%" stop-color="#2962ff" />
+      <stop offset="100%" stop-color="#143aa8" />
+    </radialGradient>
+
+    <!-- গোলকের নিচের নরম ছায়া -->
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#142864" flood-opacity="0.16" />
+    </filter>
+  </defs>
+
+  <!-- স্কুইরকল (Squircle) আইকন বেজ -->
+  <rect x="12" y="12" width="488" height="488" rx="112" fill="url(#bgGrad)" stroke="#e4e8f3" stroke-width="4" />
+
+  <!-- ডট-ম্যাট্রিক্স গ্রিড (6x6) -->
+  <g fill="#d5dced">
+    <!-- Row 1 (y=86) -->
+    <circle cx="154" cy="86" r="4.2" />
+    <circle cx="222" cy="86" r="4.2" />
+    <circle cx="290" cy="86" r="4.2" />
+    <circle cx="358" cy="86" r="4.2" />
+
+    <!-- Row 2 (y=154) -->
+    <circle cx="86" cy="154" r="4.2" />
+    <circle cx="154" cy="154" r="4.2" />
+    <circle cx="222" cy="154" r="4.2" />
+    <circle cx="290" cy="154" r="4.2" />
+    <circle cx="358" cy="154" r="4.2" />
+    <circle cx="426" cy="154" r="4.2" />
+
+    <!-- Row 3 (y=222) -->
+    <circle cx="86" cy="222" r="4.2" />
+    <circle cx="154" cy="222" r="4.2" />
+    <circle cx="222" cy="222" r="4.2" />
+    <circle cx="290" cy="222" r="4.2" />
+    <circle cx="358" cy="222" r="4.2" />
+    <circle cx="426" cy="222" r="4.2" />
+
+    <!-- Row 4 (y=290) -->
+    <circle cx="86" cy="290" r="4.2" />
+    <circle cx="154" cy="290" r="4.2" />
+    <circle cx="222" cy="290" r="4.2" />
+    <circle cx="290" cy="290" r="4.2" />
+    <circle cx="358" cy="290" r="4.2" />
+    <circle cx="426" cy="290" r="4.2" />
+
+    <!-- Row 5 (y=358) -->
+    <circle cx="86" cy="358" r="4.2" />
+    <circle cx="154" cy="358" r="4.2" />
+    <circle cx="222" cy="358" r="4.2" />
+    <circle cx="290" cy="358" r="4.2" />
+    <circle cx="358" cy="358" r="4.2" />
+    <circle cx="426" cy="358" r="4.2" />
+
+    <!-- Row 6 (y=426) -->
+    <circle cx="154" cy="426" r="4.2" />
+    <circle cx="222" cy="426" r="4.2" />
+    <circle cx="290" cy="426" r="4.2" />
+    <circle cx="358" cy="426" r="4.2" />
+  </g>
+
+  <!-- সাপের 3D শরীর (লেজ থেকে মাথা পর্যন্ত ক্রমান্বয়ে বড়) -->
+  <g filter="url(#softShadow)">
+    <!-- লেজ -->
+    <circle cx="154" cy="290" r="14" fill="url(#orbGrad)" />
+    <circle cx="154" cy="222" r="18" fill="url(#orbGrad)" />
+    <circle cx="154" cy="154" r="22" fill="url(#orbGrad)" />
+    <circle cx="222" cy="154" r="25" fill="url(#orbGrad)" />
+    <circle cx="290" cy="154" r="28" fill="url(#orbGrad)" />
+    <circle cx="358" cy="154" r="31" fill="url(#orbGrad)" />
+
+    <!-- সাপের মাথা -->
+    <circle cx="358" cy="222" r="35" fill="url(#orbGrad)" />
+
+    <!-- সাদা চোখ (নিচের ফুড অর্‌বের দিকে তাকিয়ে আছে) -->
+    <circle cx="347" cy="235" r="5" fill="#ffffff" />
+    <circle cx="369" cy="235" r="5" fill="#ffffff" />
+  </g>
+
+  <!-- ভেসে থাকা ফুড অর্‌ব (নিচের ফ্লোর ছায়াসহ) -->
+  <ellipse cx="358" cy="378" rx="22" ry="8" fill="#142864" opacity="0.14" />
+  <circle cx="358" cy="356" r="26" fill="url(#foodGrad)" />
+</svg>
