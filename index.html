@@ -54,16 +54,6 @@
       height: 100%;
     }
 
-    .bottom-vignette {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 110px;
-      background: radial-gradient(ellipse at 50% 120%, rgba(0, 0, 0, 0.035) 0%, rgba(255, 255, 255, 0) 70%);
-      pointer-events: none;
-    }
-
     .pill {
       position: absolute;
       background: #fafafa;
@@ -118,7 +108,6 @@
       pointer-events: none;
     }
 
-    /* মোড পরিবর্তনের সূক্ষ্ম নোটিফিকেশন পিল (১.৫ সেকেন্ড পর মিলিয়ে যাবে) */
     .mode-toast {
       top: 14px;
       left: 14px;
@@ -263,14 +252,12 @@
     <!-- ১. লোডিং স্ক্রিন -->
     <div id="loadingScreen" class="screen">
       <canvas id="loadingCanvas"></canvas>
-      <div class="bottom-vignette"></div>
       <div id="percentPill" class="pill loading-pill">0%</div>
     </div>
 
     <!-- ২. স্নেক গেম স্ক্রিন -->
     <div id="gameScreen" class="screen hidden">
       <canvas id="gameCanvas"></canvas>
-      <div class="bottom-vignette"></div>
 
       <div id="modeToast" class="pill mode-toast">3D Mode</div>
 
@@ -316,8 +303,8 @@
       const minDim = Math.min(lWidth, lHeight);
       lSpacing = Math.max(8, Math.min(20, Math.floor(minDim / 17)));
 
-      lCols = Math.max(10, Math.floor((lWidth - 12) / lSpacing) + 1);
-      lRows = Math.max(12, Math.floor((lHeight - 12) / lSpacing) + 1);
+      lCols = Math.max(10, Math.floor(lWidth / lSpacing) + 1);
+      lRows = Math.max(12, Math.floor(lHeight / lSpacing) + 1);
 
       lOffsetX = (lWidth - (lCols - 1) * lSpacing) / 2;
       lOffsetY = (lHeight - (lRows - 1) * lSpacing) / 2;
@@ -393,7 +380,7 @@
     }
 
     /* =========================================================
-       ২. স্নেক গেম (2D ও 3D মোড টগল, র‍্যাপ-অ্যারাউন্ড, T9)
+       ২. স্নেক গেম (2D বর্ডারলেস + 3D ভাসমান বোর্ড ও ডায়নামিক ক্যামেরা)
        ========================================================= */
     const gameScreen = document.getElementById("gameScreen");
     const gameCanvas = document.getElementById("gameCanvas");
@@ -415,6 +402,7 @@
     let snake = [];
     let prevSnake = [];
     let food = { x: 0, y: 0 };
+    let particles = [];
     let dir = { x: 0, y: 1 };
     let dirQueue = [];
     let score = 0;
@@ -425,12 +413,18 @@
     let hasMoved = false;
     let ateFoodLastTick = false;
 
-    // 2D <-> 3D স্টেট
+    // 2D <-> 3D ক্যামেরা স্টেট
     let is3DMode = false;
-    let camTilt = 0; // 0 = সম্পূর্ণ 2D, 1 = সম্পূর্ণ 3D
+    let camTilt = 0;
+    let camYaw = 0;
+    let camPitchDrift = 0;
+    let camPanX = 0;
+    let camPanY = 0;
+    let fitScale3D = 0.78;
+    let maxYaw3D = 0.14;
     let toastTimer = null;
 
-    // ৫ সেকেন্ড লং-প্রেস স্টেট
+    // লং-প্রেস স্টেট
     let isHolding = false;
     let holdTriggered = false;
     let holdStartTime = 0;
@@ -471,17 +465,38 @@
       gameCanvas.height = gHeight * dpr;
       gCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+      // 2D মোডের জন্য পুরো স্ক্রিনে বর্ডার ছাড়া ফিট করা
       const minDim = Math.min(gWidth, gHeight);
-      cellSize = Math.max(10, Math.min(36, Math.floor((minDim - 16) / 11)));
+      const targetCell = Math.max(12, Math.min(44, Math.floor(minDim / 11)));
+      const baseCols = Math.max(10, Math.round(gWidth / targetCell));
 
-      gridCols = Math.max(10, Math.floor((gWidth - cellSize) / cellSize));
-      gridRows = Math.max(12, Math.floor((gHeight - cellSize) / cellSize));
+      let bestCols = baseCols;
+      let bestScoreFit = Infinity;
 
-      gridCols = Math.min(gridCols, 20);
-      gridRows = Math.min(gridRows, 18);
+      for (let c = Math.max(10, baseCols - 1); c <= baseCols + 2; c++) {
+        const cs = gWidth / c;
+        const r = Math.floor(gHeight / cs);
+        if (r < 12) continue;
+        const remY = gHeight - (r - 1) * cs;
+        const diff = Math.abs(remY - cs);
+        if (diff < bestScoreFit) {
+          bestScoreFit = diff;
+          bestCols = c;
+        }
+      }
+
+      gridCols = bestCols;
+      cellSize = gWidth / gridCols;
+      gridRows = Math.max(12, Math.floor(gHeight / cellSize));
 
       gOffsetX = (gWidth - (gridCols - 1) * cellSize) / 2;
       gOffsetY = (gHeight - (gridRows - 1) * cellSize) / 2;
+
+      // 3D মোডে বোর্ডের চারপাশ যেন স্ক্রিনের ভেতরে সুন্দরভাবে ফিট থাকে
+      const aspect = gridCols / gridRows;
+      maxYaw3D = aspect < 0.7 ? 0.13 : 0.19;
+      const rotHalfW = (gridCols * 0.5) * Math.cos(maxYaw3D) + (gridRows * 0.5) * Math.sin(maxYaw3D);
+      fitScale3D = Math.min(0.83, (gridCols * 0.44) / Math.max(1, rotHalfW));
     }
 
     function resetGame() {
@@ -497,6 +512,7 @@
         { x: startX, y: startY - 3 }
       ];
       prevSnake = snake.map(s => ({ ...s }));
+      particles = [];
 
       dir = { x: 0, y: 1 };
       dirQueue = [];
@@ -540,6 +556,23 @@
         return;
       }
       food = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+    }
+
+    function spawnEatParticles(fx, fy) {
+      for (let p = 0; p < 10; p++) {
+        const angle = (Math.PI * 2 * p) / 10 + Math.random() * 0.45;
+        const speed = 0.045 + Math.random() * 0.065;
+        particles.push({
+          gx: fx,
+          gy: fy,
+          lz: cellSize * 0.38,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          vz: cellSize * (0.08 + Math.random() * 0.09),
+          r: cellSize * (0.075 + Math.random() * 0.055),
+          life: 1.0
+        });
+      }
     }
 
     function queueDirection(nx, ny) {
@@ -591,6 +624,7 @@
 
       if (willEat) {
         ateFoodLastTick = true;
+        spawnEatParticles(food.x, food.y);
         score += 1;
         scoreEl.textContent = score;
         if (score > bestScore) {
@@ -621,7 +655,7 @@
     }
 
     /* =========================================================
-       3D পার্সপেক্টিভ প্রোজেকশন (camTilt=0 হলে হুবহু 2D)
+       3D পার্সপেক্টিভ + ডায়নামিক স্নেক-ফলো ক্যামেরা
        ========================================================= */
     function project3D(gx, gy, lzPx) {
       const cx = (gridCols - 1) / 2;
@@ -641,24 +675,31 @@
         };
       }
 
-      const tiltRad = camTilt * (48 * Math.PI / 180);
+      const yawRad = camYaw * camTilt;
+      const cosY = Math.cos(yawRad);
+      const sinY = Math.sin(yawRad);
+
+      const rx = lx * cosY - ly * sinY;
+      const ry = lx * sinY + ly * cosY;
+
+      const tiltRad = camTilt * ((45 * Math.PI / 180) + camPitchDrift);
       const cosT = Math.cos(tiltRad);
       const sinT = Math.sin(tiltRad);
 
-      const camY = ly * cosT - lzPx * sinT;
-      const camZOffset = ly * sinT + lzPx * cosT;
+      const camY = ry * cosT - lzPx * sinT;
+      const camZOffset = ry * sinT + lzPx * cosT;
 
       const boardSpan = Math.max(gridCols * cellSize, gridRows * cellSize);
-      const camDist = boardSpan * 1.95;
+      const camDist = boardSpan * 1.85;
 
-      const perspScale = camDist / Math.max(60, camDist - camZOffset);
+      const perspScale = camDist / Math.max(70, camDist - camZOffset);
       const scale = lerp(1, perspScale, camTilt);
-      const fitScale = lerp(1, 0.85, camTilt);
-      const yShift = lerp(0, cellSize * 0.25, camTilt);
+      const fitScale = lerp(1, fitScale3D, camTilt);
+      const yShift = lerp(0, cellSize * 0.2, camTilt);
 
       return {
-        x: centerX + lx * scale * fitScale,
-        y: centerY + camY * scale * fitScale + yShift,
+        x: centerX + (rx * scale * fitScale) + camPanX * camTilt,
+        y: centerY + (camY * scale * fitScale) + yShift + camPanY * camTilt,
         scale: scale * fitScale,
         depth: camZOffset
       };
@@ -679,53 +720,96 @@
       gCtx.clip();
     }
 
+    /* 3D মোডের ভাসমান বোর্ড ও বর্ডার (শুধু 3D মোডে দেখা যাবে, 2D তে বর্ডারহীন থাকবে) */
     function draw3DBoardBase() {
       if (camTilt <= 0.01) return;
 
-      const p1 = project3D(-0.6, -0.6, 0);
-      const p2 = project3D(gridCols - 0.4, -0.6, 0);
-      const p3 = project3D(gridCols - 0.4, gridRows - 0.4, 0);
-      const p4 = project3D(-0.6, gridRows - 0.4, 0);
+      const m = 0.62;
+      const maxX = gridCols - 1 + m;
+      const maxY = gridRows - 1 + m;
+      const thick = cellSize * 0.42 * camTilt;
 
-      const thickness = cellSize * 0.35 * camTilt;
+      const t1 = project3D(-m, -m, 0);
+      const t2 = project3D(maxX, -m, 0);
+      const t3 = project3D(maxX, maxY, 0);
+      const t4 = project3D(-m, maxY, 0);
 
-      // বোর্ডের নিচের নরম ছায়া
+      const b1 = project3D(-m, -m, -thick);
+      const b2 = project3D(maxX, -m, -thick);
+      const b3 = project3D(maxX, maxY, -thick);
+      const b4 = project3D(-m, maxY, -thick);
+
       gCtx.save();
+
+      // ১. বোর্ডের নিচের নরম ভাসমান ছায়া
+      const shadowDrop = cellSize * 0.38 * camTilt;
       gCtx.beginPath();
-      gCtx.moveTo(p4.x, p4.y + thickness);
-      gCtx.lineTo(p3.x, p3.y + thickness);
-      gCtx.lineTo(p3.x + 4 * camTilt, p3.y + thickness + 12 * camTilt);
-      gCtx.lineTo(p4.x - 4 * camTilt, p4.y + thickness + 12 * camTilt);
+      gCtx.moveTo(b1.x, b1.y + shadowDrop);
+      gCtx.lineTo(b2.x, b2.y + shadowDrop);
+      gCtx.lineTo(b3.x + 4 * camTilt, b3.y + shadowDrop);
+      gCtx.lineTo(b4.x - 4 * camTilt, b4.y + shadowDrop);
       gCtx.closePath();
-      gCtx.fillStyle = `rgba(0, 0, 0, ${0.06 * camTilt})`;
+      gCtx.fillStyle = `rgba(30, 55, 130, ${0.075 * camTilt})`;
       gCtx.fill();
 
-      // বোর্ডের 3D সামনের পুরুত্ব (Slab edge)
+      // ২. ক্যামেরা ডানে বা বামে ঘুরলে পাশের 3D দেয়াল আঁকা
+      if (camYaw * camTilt > 0.002) {
+        // বাম পাশের দেয়াল দৃশ্যমান
+        gCtx.beginPath();
+        gCtx.moveTo(t1.x, t1.y);
+        gCtx.lineTo(t4.x, t4.y);
+        gCtx.lineTo(b4.x, b4.y);
+        gCtx.lineTo(b1.x, b1.y);
+        gCtx.closePath();
+        gCtx.fillStyle = `rgba(210, 222, 245, ${0.9 * camTilt})`;
+        gCtx.fill();
+      } else if (camYaw * camTilt < -0.002) {
+        // ডান পাশের দেয়াল দৃশ্যমান
+        gCtx.beginPath();
+        gCtx.moveTo(t2.x, t2.y);
+        gCtx.lineTo(t3.x, t3.y);
+        gCtx.lineTo(b3.x, b3.y);
+        gCtx.lineTo(b2.x, b2.y);
+        gCtx.closePath();
+        gCtx.fillStyle = `rgba(210, 222, 245, ${0.9 * camTilt})`;
+        gCtx.fill();
+      }
+
+      // ৩. সামনের 3D দেয়াল (Front Slab Edge)
       gCtx.beginPath();
-      gCtx.moveTo(p4.x, p4.y);
-      gCtx.lineTo(p3.x, p3.y);
-      gCtx.lineTo(p3.x, p3.y + thickness);
-      gCtx.lineTo(p4.x, p4.y + thickness);
+      gCtx.moveTo(t4.x, t4.y);
+      gCtx.lineTo(t3.x, t3.y);
+      gCtx.lineTo(b3.x, b3.y);
+      gCtx.lineTo(b4.x, b4.y);
       gCtx.closePath();
-      gCtx.fillStyle = `rgba(226, 232, 245, ${0.85 * camTilt})`;
+      const edgeGrad = gCtx.createLinearGradient(t4.x, t4.y, t3.x, b3.y);
+      edgeGrad.addColorStop(0, `rgba(222, 231, 248, ${0.92 * camTilt})`);
+      edgeGrad.addColorStop(1, `rgba(202, 215, 242, ${0.92 * camTilt})`);
+      gCtx.fillStyle = edgeGrad;
       gCtx.fill();
 
-      // বোর্ডের উপরিভাগের হালকা বর্ডার
+      // ৪. বোর্ডের উপরিভাগ ও নীলচে-সাদা গ্লাস বর্ডার
       gCtx.beginPath();
-      gCtx.moveTo(p1.x, p1.y);
-      gCtx.lineTo(p2.x, p2.y);
-      gCtx.lineTo(p3.x, p3.y);
-      gCtx.lineTo(p4.x, p4.y);
+      gCtx.moveTo(t1.x, t1.y);
+      gCtx.lineTo(t2.x, t2.y);
+      gCtx.lineTo(t3.x, t3.y);
+      gCtx.lineTo(t4.x, t4.y);
       gCtx.closePath();
-      gCtx.fillStyle = `rgba(252, 253, 255, ${0.9 * camTilt})`;
+
+      const topGrad = gCtx.createLinearGradient(t1.x, t1.y, t3.x, t3.y);
+      topGrad.addColorStop(0, `rgba(255, 255, 255, ${0.96 * camTilt})`);
+      topGrad.addColorStop(1, `rgba(246, 249, 255, ${0.96 * camTilt})`);
+      gCtx.fillStyle = topGrad;
       gCtx.fill();
-      gCtx.strokeStyle = `rgba(215, 224, 242, ${0.75 * camTilt})`;
-      gCtx.lineWidth = 1.2;
+
+      gCtx.strokeStyle = `rgba(198, 212, 242, ${0.85 * camTilt})`;
+      gCtx.lineWidth = 1.4;
       gCtx.stroke();
+
       gCtx.restore();
     }
 
-    function drawFloorShadow(gx, gy, baseRadius) {
+    function drawFloorShadow(gx, gy, baseRadius, isFood) {
       if (camTilt <= 0.02) return;
       const p = project3D(gx, gy, 0);
       const r = baseRadius * p.scale;
@@ -734,14 +818,33 @@
       gCtx.save();
       gCtx.beginPath();
       gCtx.ellipse(
-        p.x + r * 0.12 * camTilt,
-        p.y + r * 0.12 * camTilt,
-        r * 0.96,
-        r * 0.96 * tiltFlatten,
-        0, 0, Math.PI * 2
+        p.x + r * 0.1 * camTilt,
+        p.y + r * 0.1 * camTilt,
+        r * 0.94,
+        r * 0.94 * tiltFlatten,
+        camYaw * camTilt * 0.5,
+        0, Math.PI * 2
       );
-      gCtx.fillStyle = `rgba(20, 35, 80, ${0.14 * camTilt})`;
+      gCtx.fillStyle = isFood
+        ? `rgba(41, 98, 255, ${0.18 * camTilt})`
+        : `rgba(20, 38, 90, ${0.15 * camTilt})`;
       gCtx.fill();
+      gCtx.restore();
+    }
+
+    function drawFoodTargetRing(gx, gy, baseRadius, now) {
+      if (camTilt <= 0.12) return;
+      const p = project3D(gx, gy, 0);
+      const pulse = 0.95 + 0.25 * Math.sin(now * 0.0055);
+      const r = baseRadius * p.scale * pulse * 1.15;
+      const tiltFlatten = lerp(1, 0.56, camTilt);
+
+      gCtx.save();
+      gCtx.beginPath();
+      gCtx.ellipse(p.x, p.y, r, r * tiltFlatten, camYaw * camTilt * 0.5, 0, Math.PI * 2);
+      gCtx.strokeStyle = `rgba(41, 98, 255, ${0.24 * camTilt})`;
+      gCtx.lineWidth = Math.max(1, 1.5 * p.scale);
+      gCtx.stroke();
       gCtx.restore();
     }
 
@@ -756,27 +859,42 @@
         gCtx.fillStyle = isDead ? "rgba(165, 165, 170, 0.72)" : "#2962ff";
         gCtx.fill();
       } else {
-        // 3D গোলকের গ্রেডিয়েন্ট শেডিং
         const grad = gCtx.createRadialGradient(
           p.x - r * 0.32 * camTilt,
           p.y - r * 0.34 * camTilt,
-          r * 0.08,
+          r * 0.06,
           p.x,
           p.y,
           r
         );
 
         if (!isDead) {
-          grad.addColorStop(0, camTilt > 0.4 ? "#85abff" : "#5182ff");
-          grad.addColorStop(0.45, "#2962ff");
-          grad.addColorStop(1, "#12349e");
+          grad.addColorStop(0, camTilt > 0.35 ? "#94b8ff" : "#5182ff");
+          grad.addColorStop(0.42, "#2962ff");
+          grad.addColorStop(0.88, "#143ab8");
+          grad.addColorStop(1, "#0d2985");
         } else {
-          grad.addColorStop(0, "rgba(218, 218, 224, 0.85)");
-          grad.addColorStop(0.55, "rgba(165, 165, 170, 0.76)");
-          grad.addColorStop(1, "rgba(115, 115, 122, 0.82)");
+          grad.addColorStop(0, "rgba(225, 225, 232, 0.88)");
+          grad.addColorStop(0.55, "rgba(165, 165, 170, 0.78)");
+          grad.addColorStop(1, "rgba(110, 110, 118, 0.84)");
         }
         gCtx.fillStyle = grad;
         gCtx.fill();
+
+        // 3D গ্লসি মার্বেল স্পেকুলার হাইলাইট
+        if (!isDead && camTilt > 0.25) {
+          gCtx.beginPath();
+          gCtx.ellipse(
+            p.x - r * 0.32,
+            p.y - r * 0.34,
+            r * 0.2,
+            r * 0.12,
+            -Math.PI / 4,
+            0, Math.PI * 2
+          );
+          gCtx.fillStyle = `rgba(255, 255, 255, ${0.42 * camTilt})`;
+          gCtx.fill();
+        }
       }
 
       if (isHead) {
@@ -785,7 +903,6 @@
     }
 
     function drawEyes3D(gx, gy, baseRadius, isDead) {
-      // গ্রিড ইউনিটে চোখের অবস্থান (2D এবং 3D উভয় মোডেই নিখুঁত)
       const rGrid = baseRadius / cellSize;
       const perpX = -dir.y;
       const perpY = dir.x;
@@ -841,7 +958,7 @@
     function drawHoldIndicator(now) {
       if (!isHolding || holdTriggered) return;
       const elapsed = now - holdStartTime;
-      if (elapsed < 450) return; // সাধারণ ট্যাপ বা সোয়াইপে দেখাবে না
+      if (elapsed < 350) return;
 
       const progress = Math.min(1, elapsed / HOLD_DURATION);
       const r = Math.max(16, Math.min(26, gWidth * 0.06));
@@ -865,34 +982,16 @@
     function drawGame(now) {
       gCtx.clearRect(0, 0, gWidth, gHeight);
 
-      // ৫ সেকেন্ড হোল্ড চেক
       if (isHolding && !holdTriggered && (now - holdStartTime >= HOLD_DURATION)) {
         holdTriggered = true;
         isHolding = false;
         toggle3DMode();
       }
 
-      // 2D <-> 3D স্মুথ ট্রানজিশন
       const targetTilt = is3DMode ? 1 : 0;
-      camTilt += (targetTilt - camTilt) * 0.12;
+      camTilt += (targetTilt - camTilt) * 0.1;
       if (Math.abs(targetTilt - camTilt) < 0.002) camTilt = targetTilt;
 
-      // ১. 3D বোর্ড বেজ (যদি 3D মোড চালু থাকে)
-      draw3DBoardBase();
-
-      // ২. ব্যাকগ্রাউন্ড ডট গ্রিড
-      const baseDotR = Math.max(1.1, cellSize * 0.055);
-      gCtx.fillStyle = "rgba(0, 0, 0, 0.085)";
-      for (let r = 0; r < gridRows; r++) {
-        for (let c = 0; c < gridCols; c++) {
-          const p = project3D(c, r, 0);
-          gCtx.beginPath();
-          gCtx.arc(p.x, p.y, baseDotR * p.scale, 0, Math.PI * 2);
-          gCtx.fill();
-        }
-      }
-
-      // লজিক আপডেট
       let t = 1;
       if (isPaused) {
         t = pauseProgress;
@@ -905,12 +1004,54 @@
         t = isGameOver ? 0 : Math.min(1, (now - lastTick) / tickInterval);
       }
 
-      // ৩. সব রেন্ডারেবল গোলক (সাপ + খাবার) একত্রিত করে ডেপথ অনুযায়ী সাজানো
+      // সাপের অবস্থান ও চলার দিকের সাথে 3D ক্যামেরার ডায়নামিক মুভমেন্ট
+      const headCurr = snake[0] || { x: gridCols / 2, y: gridRows / 2 };
+      const headPrev = prevSnake[0] || headCurr;
+      const hx = (!isGameOver && Math.abs(headCurr.x - headPrev.x) <= 1) ? lerp(headPrev.x, headCurr.x, t) : headCurr.x;
+      const hy = (!isGameOver && Math.abs(headCurr.y - headPrev.y) <= 1) ? lerp(headPrev.y, headCurr.y, t) : headCurr.y;
+
+      const normHeadX = (hx / Math.max(1, gridCols - 1)) - 0.5;
+      const normHeadY = (hy / Math.max(1, gridRows - 1)) - 0.5;
+
+      const idleYaw = Math.sin(now * 0.00075) * (maxYaw3D * 0.35);
+      const steerYaw = -normHeadX * (maxYaw3D * 0.65) - dir.x * (maxYaw3D * 0.28);
+      const targetYaw = is3DMode ? Math.max(-maxYaw3D, Math.min(maxYaw3D, idleYaw + steerYaw)) : 0;
+
+      const idlePitch = Math.sin(now * 0.001) * 0.035;
+      const steerPitch = normHeadY * 0.09 + dir.y * 0.04;
+      const targetPitchDrift = is3DMode ? idlePitch + steerPitch : 0;
+
+      const targetPanX = is3DMode ? (-normHeadX * cellSize * 0.75 - dir.x * cellSize * 0.3) : 0;
+      const targetPanY = is3DMode ? (-normHeadY * cellSize * 0.55 - dir.y * cellSize * 0.25) : 0;
+
+      camYaw += (targetYaw - camYaw) * 0.06;
+      camPitchDrift += (targetPitchDrift - camPitchDrift) * 0.06;
+      camPanX += (targetPanX - camPanX) * 0.06;
+      camPanY += (targetPanY - camPanY) * 0.06;
+
+      // ১. 3D বোর্ডের বর্ডার ও স্ল্যাব (শুধু 3D মোডে)
+      draw3DBoardBase();
+
+      // ২. ব্যাকগ্রাউন্ড ডট গ্রিড
+      const baseDotR = Math.max(1.1, cellSize * 0.055);
+      gCtx.fillStyle = camTilt > 0.2 ? "rgba(40, 70, 150, 0.13)" : "rgba(0, 0, 0, 0.085)";
+      for (let r = 0; r < gridRows; r++) {
+        for (let c = 0; c < gridCols; c++) {
+          const p = project3D(c, r, 0);
+          gCtx.beginPath();
+          gCtx.arc(p.x, p.y, baseDotR * p.scale, 0, Math.PI * 2);
+          gCtx.fill();
+        }
+      }
+
+      // খাবারের নিচে পালসিং টার্গেট রিং (3D মোডে)
+      const foodBaseR = cellSize * 0.36;
+      drawFoodTargetRing(food.x, food.y, foodBaseR, now);
+
+      // ৩. সব গোলক সাজানো
       const drawItems = [];
 
-      // খাবার (3D মোডে হালকা ভেসে থাকবে)
-      const foodBaseR = cellSize * 0.36;
-      const foodFloat = camTilt * (Math.sin(now * 0.0045) * cellSize * 0.1 + cellSize * 0.12);
+      const foodFloat = camTilt * (Math.sin(now * 0.0045) * cellSize * 0.11 + cellSize * 0.16);
       const foodLz = foodBaseR * camTilt + foodFloat;
       drawItems.push({
         gx: food.x,
@@ -918,11 +1059,11 @@
         lz: foodLz,
         radius: foodBaseR,
         isHead: false,
+        isFood: true,
         wrapped: false,
         depth: project3D(food.x, food.y, foodLz).depth
       });
 
-      // সাপের সেগমেন্টগুলো
       const totalSegs = snake.length;
       for (let i = totalSegs - 1; i >= 0; i--) {
         const curr = snake[i];
@@ -942,6 +1083,7 @@
             lz: segLz,
             radius,
             isHead: i === 0,
+            isFood: false,
             wrapped: false,
             depth: project3D(curr.x, curr.y, segLz).depth
           });
@@ -962,6 +1104,7 @@
             lz: segLz,
             radius,
             isHead: i === 0,
+            isFood: false,
             wrapped: false,
             depth: project3D(gx, gy, segLz).depth
           });
@@ -977,6 +1120,7 @@
             lz: segLz,
             radius,
             isHead: i === 0,
+            isFood: false,
             wrapped: true,
             depth: project3D(outX, outY, segLz).depth
           });
@@ -989,13 +1133,13 @@
             lz: segLz,
             radius,
             isHead: i === 0,
+            isFood: false,
             wrapped: true,
             depth: project3D(inX, inY, segLz).depth
           });
         }
       }
 
-      // না খেলে সামনে আগালে লেজের ফেলে আসা ঘরে ক্ষুদ্র ডট
       if (!isGameOver && !ateFoodLastTick && prevSnake.length > 0) {
         const vacated = prevSnake[prevSnake.length - 1];
         const fadeR = cellSize * 0.2 * (1 - t);
@@ -1007,23 +1151,24 @@
             lz: fadeLz,
             radius: fadeR,
             isHead: false,
+            isFood: false,
             wrapped: false,
             depth: project3D(vacated.x, vacated.y, fadeLz).depth
           });
         }
       }
 
-      // আগে ফ্লোরের সব ছায়া আঁকা (ক্লিপড)
+      // ফ্লোরের ছায়া
       if (camTilt > 0.02) {
         gCtx.save();
         clipBoardAtHeight(0);
         for (const item of drawItems) {
-          drawFloorShadow(item.gx, item.gy, item.radius);
+          drawFloorShadow(item.gx, item.gy, item.radius, item.isFood);
         }
         gCtx.restore();
       }
 
-      // ৩D ডেপথ সর্টিং (দূরের বস্তু আগে, কাছের বস্তু পরে)
+      // ৩D ডেপথ সর্টিং
       drawItems.sort((a, b) => a.depth - b.depth);
 
       // গোলকগুলো আঁকা
@@ -1038,9 +1183,32 @@
         }
       }
 
-      // ৫ সেকেন্ড লং-প্রেস ইন্ডিকেটর
-      drawHoldIndicator(now);
+      // ৪. খাবার খাওয়ার পার্টিকেল স্পার্কল আপডেট ও আঁকা
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const pt = particles[i];
+        if (!isPaused) {
+          pt.gx += pt.vx;
+          pt.gy += pt.vy;
+          pt.vz -= cellSize * 0.008;
+          pt.lz += pt.vz;
+          if (pt.lz < pt.r) {
+            pt.lz = pt.r;
+            pt.vz = -pt.vz * 0.45;
+          }
+          pt.life -= 0.028;
+        }
+        if (pt.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+        const pp = project3D(pt.gx, pt.gy, pt.lz * camTilt);
+        gCtx.beginPath();
+        gCtx.arc(pp.x, pp.y, pt.r * pp.scale * pt.life, 0, Math.PI * 2);
+        gCtx.fillStyle = `rgba(41, 98, 255, ${0.85 * pt.life})`;
+        gCtx.fill();
+      }
 
+      drawHoldIndicator(now);
       gameLoopId = requestAnimationFrame(drawGame);
     }
 
@@ -1051,13 +1219,12 @@
     }
 
     /* =========================================================
-       ৩. T9 কীপ্যাড + কীবোর্ড + টাচ (Swipe & 5s Hold) কন্ট্রোল
+       ৩. T9 কীপ্যাড + কীবোর্ড + টাচ (Swipe & Hold) কন্ট্রোল
        ========================================================= */
     window.addEventListener("keydown", e => {
       const key = e.key;
       const code = e.keyCode || e.which;
 
-      // 0 চাপলে যেকোনো সময় 3D / 2D মোড টগল হবে
       if (key === "0" || code === 48 || code === 96) {
         e.preventDefault();
         if (e.repeat) return;
@@ -1076,7 +1243,6 @@
         return;
       }
 
-      // ২ / ArrowUp / W -> উপরে
       if (
         key === "2" || key === "ArrowUp" || key === "Up" || key === "w" || key === "W" ||
         code === 50 || code === 98 || code === 38
@@ -1086,7 +1252,6 @@
         return;
       }
 
-      // ৮ / ArrowDown / S -> নিচে
       if (
         key === "8" || key === "ArrowDown" || key === "Down" || key === "s" || key === "S" ||
         code === 56 || code === 104 || code === 40
@@ -1096,7 +1261,6 @@
         return;
       }
 
-      // ৪ / ArrowLeft / A -> বামে
       if (
         key === "4" || key === "ArrowLeft" || key === "Left" || key === "a" || key === "A" ||
         code === 52 || code === 100 || code === 37
@@ -1106,7 +1270,6 @@
         return;
       }
 
-      // ৬ / ArrowRight / D -> ডানে
       if (
         key === "6" || key === "ArrowRight" || key === "Right" || key === "d" || key === "D" ||
         code === 54 || code === 102 || code === 39
@@ -1116,7 +1279,6 @@
         return;
       }
 
-      // ৫ / Enter / Space / SoftLeft / * -> Pause-Resume বা Play Again
       if (
         key === "5" || key === "Enter" || key === " " || key === "Spacebar" ||
         key === "OK" || key === "Select" || key === "SoftLeft" || key === "*" ||
@@ -1132,7 +1294,6 @@
         return;
       }
 
-      // # / SoftRight -> যেকোনো সময় Instant Restart
       if (key === "#" || key === "SoftRight" || code === 163) {
         e.preventDefault();
         if (e.repeat) return;
@@ -1140,7 +1301,6 @@
       }
     });
 
-    // টাচ সোয়াইপ + ৫ সেকেন্ড লং-প্রেস কন্ট্রোল
     let touchStartX = null;
     let touchStartY = null;
 
@@ -1195,7 +1355,6 @@
       isHolding = false;
     });
 
-    // পিসির মাউস দিয়েও ৫ সেকেন্ড চেপে ধরে 3D/2D টগল সাপোর্ট
     gameCanvas.addEventListener("mousedown", e => {
       if (e.button !== 0) return;
       isHolding = true;
@@ -1221,14 +1380,14 @@
       if (!isLoadingDone) {
         setupLoadingCanvas();
       } else {
-        const dpr = window.devicePixelRatio || 1;
-        gWidth = window.innerWidth;
-        gHeight = window.innerHeight;
-        gameCanvas.width = gWidth * dpr;
-        gameCanvas.height = gHeight * dpr;
-        gCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        gOffsetX = (gWidth - (gridCols - 1) * cellSize) / 2;
-        gOffsetY = (gHeight - (gridRows - 1) * cellSize) / 2;
+        setupGameGrid();
+        snake.forEach(seg => {
+          seg.x = ((seg.x % gridCols) + gridCols) % gridCols;
+          seg.y = ((seg.y % gridRows) + gridRows) % gridRows;
+        });
+        prevSnake = snake.map(s => ({ ...s }));
+        food.x = ((food.x % gridCols) + gridCols) % gridCols;
+        food.y = ((food.y % gridRows) + gridRows) % gridRows;
       }
     });
 
